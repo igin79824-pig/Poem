@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>唐詩拼字闖關挑戰</title>
+  <!-- 引入 SortableJS：支援電腦滑鼠與平板觸控拖曳 -->
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+  <style>
+    :root {
+      --primary: #8d6e63;
+      --accent: #ff9800;
+      --bg: #f7f3ec;
+      --card-bg: #ffffff;
+      --correct: #2e7d32;
+      --wrong: #c62828;
+    }
+
+    body {
+      font-family: "PingFang TC", "Microsoft JhengHei", "Noto Sans TC", sans-serif;
+      background: var(--bg);
+      color: #3e2723;
+      margin: 0;
+      padding: 24px 16px;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      min-height: 100vh;
+      user-select: none;
+      -webkit-user-select: none;
+      box-sizing: border-box;
+    }
+
+    .quiz-card {
+      background: var(--card-bg);
+      max-width: 580px;
+      width: 100%;
+      border-radius: 20px;
+      padding: 28px 24px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
+      text-align: center;
+    }
+
+    /* 頂部進度條與資訊 */
+    .header-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-weight: bold;
+      color: var(--primary);
+      margin-bottom: 12px;
+      font-size: 1.05rem;
+    }
+    .progress-bar-bg {
+      height: 8px;
+      background: #e0d7ce;
+      border-radius: 4px;
+      overflow: hidden;
+      margin-bottom: 24px;
+    }
+    .progress-bar-fill {
+      height: 100%;
+      width: 0%;
+      background: var(--accent);
+      transition: width 0.3s ease;
+    }
+
+    .quiz-title {
+      font-size: 1.35rem;
+      font-weight: bold;
+      margin-bottom: 6px;
+      color: #4e342e;
+    }
+    .quiz-hint {
+      color: #795548;
+      font-size: 0.98rem;
+      margin-bottom: 22px;
+    }
+
+    /* 拖曳區共通標籤與外框 */
+    .section-label {
+      font-size: 0.9rem;
+      color: #8d6e63;
+      text-align: left;
+      margin-bottom: 6px;
+      font-weight: bold;
+    }
+
+    /* 放置答案框 (目標區) */
+    .slot-zone {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 10px;
+      min-height: 68px;
+      background: #fdfbf7;
+      border: 2px dashed #bcaaa4;
+      border-radius: 12px;
+      padding: 10px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+      transition: background 0.2s;
+    }
+    .slot-zone.is-active {
+      background: #fff8e1;
+    }
+
+    /* 候選字卡池 (來源區) */
+    .pool-zone {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 10px;
+      min-height: 68px;
+      background: #f4eee6;
+      border-radius: 12px;
+      padding: 12px;
+      margin-bottom: 24px;
+      flex-wrap: wrap;
+    }
+
+    /* 字卡樣式 */
+    .word-tile {
+      background: #fff3e0;
+      border: 2px solid #ffb74d;
+      color: #e65100;
+      font-size: 1.25rem;
+      font-weight: bold;
+      padding: 10px 18px;
+      border-radius: 10px;
+      cursor: grab;
+      touch-action: none;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.08);
+      transition: transform 0.15s, background 0.15s;
+    }
+    .word-tile:active {
+      cursor: grabbing;
+      transform: scale(1.08);
+    }
+    .sortable-ghost {
+      opacity: 0.35;
+      background: #ffd54f;
+    }
+
+    /* 回饋訊息 */
+    .feedback-msg {
+      min-height: 30px;
+      font-size: 1.1rem;
+      font-weight: bold;
+      margin-bottom: 18px;
+    }
+
+    /* 操作按鈕群 */
+    .btn-group {
+      display: flex;
+      justify-content: center;
+      gap: 12px;
+    }
+    .btn {
+      padding: 12px 26px;
+      font-size: 1.05rem;
+      border-radius: 30px;
+      border: none;
+      font-weight: bold;
+      cursor: pointer;
+      transition: opacity 0.2s, transform 0.1s;
+    }
+    .btn:active { transform: scale(0.97); }
+    .btn-submit { background: var(--accent); color: white; }
+    .btn-next { background: #4caf50; color: white; display: none; }
+    .btn-reset { background: #8d6e63; color: white; }
+
+    /* 結算頁面 */
+    #summary-view {
+      display: none;
+      padding: 20px 0;
+    }
+    .badge-icon {
+      font-size: 4rem;
+      margin-bottom: 10px;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="quiz-card">
+    <!-- 答題進行中視圖 -->
+    <div id="quiz-view">
+      <div class="header-bar">
+        <span id="stage-text">第 1 / 4 題</span>
+        <span id="score-text">得分：0 分</span>
+      </div>
+      <div class="progress-bar-bg">
+        <div id="progress-bar" class="progress-bar-fill"></div>
+      </div>
+
+      <div id="quiz-title" class="quiz-title">題目載入中...</div>
+      <div id="quiz-hint" class="quiz-hint">提示載入中...</div>
+
+      <div class="section-label">📌 請把字卡排進此答案框：</div>
+      <div id="answer-slot" class="slot-zone"></div>
+
+      <div class="section-label">🔤 待選字卡庫：</div>
+      <div id="word-pool" class="pool-zone"></div>
+
+      <div id="feedback" class="feedback-msg"></div>
+
+      <div class="btn-group">
+        <button id="btn-submit" class="btn btn-submit" onclick="submitAnswer()">確認送出</button>
+        <button id="btn-next" class="btn btn-next" onclick="nextQuestion()">下一題 👉</button>
+      </div>
+    </div>
+
+    <!-- 測驗結算視圖 -->
+    <div id="summary-view">
+      <div class="badge-icon" id="result-icon">🏆</div>
+      <h2 id="result-title" style="color: #4e342e; margin-bottom: 8px;">挑戰完成！</h2>
+      <p id="result-desc" style="color: #6d4c41; font-size: 1.15rem;"></p>
+      <div style="margin-top: 25px;">
+        <button class="btn btn-reset" onclick="restartQuiz()">重新挑戰 🔄</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ==========================================
+    // 1. 題庫設定 (可隨時在此自由增刪題目與字詞)
+    // ==========================================
+    const quizData = [
+      {
+        title: "李白《靜夜思》",
+        hint: "請排列出這首詩的第一句：",
+        answer: ["床", "前", "明", "月", "光"],
+        points: 25
+      },
+      {
+        title: "孟浩然《春曉》",
+        hint: "請排列出這首詩的第二句：",
+        answer: ["處", "處", "聞", "啼", "鳥"],
+        points: 25
+      },
+      {
+        title: "王之渙《登鸛雀樓》",
+        hint: "請排列出包含夕陽意境的那一句：",
+        answer: ["白", "日", "依", "山", "盡"],
+        points: 25
+      },
+      {
+        title: "賀知章《回鄉偶書》",
+        hint: "請排列出寫童顏老去的名句（七言）：",
+        answer: ["少", "小", "離", "家", "老", "大", "回"],
+        points: 25
+      }
+    ];
+
+    let currentIndex = 0;
+    let currentScore = 0;
+    let isAnswered = false; // 防止重複送出洗分
+
+    const answerSlot = document.getElementById('answer-slot');
+    const wordPool = document.getElementById('word-pool');
+    const feedback = document.getElementById('feedback');
+    const btnSubmit = document.getElementById('btn-submit');
+    const btnNext = document.getElementById('btn-next');
+
+    // ==========================================
+    // 2. 初始化 SortableJS 雙向拖曳群組
+    // ==========================================
+    new Sortable(answerSlot, {
+      group: 'poem-words',
+      animation: 180,
+      ghostClass: 'sortable-ghost'
+    });
+
+    new Sortable(wordPool, {
+      group: 'poem-words',
+      animation: 180,
+      ghostClass: 'sortable-ghost'
+    });
+
+    // ==========================================
+    // 3. 載入題目與渲染
+    // ==========================================
+    function loadQuestion(index) {
+      isAnswered = false;
+      feedback.innerText = '';
+      btnSubmit.style.display = 'inline-block';
+      btnNext.style.display = 'none';
+
+      const q = quizData[index];
+
+      // 更新進度與資訊
+      document.getElementById('stage-text').innerText = `第 ${index + 1} / ${quizData.length} 題`;
+      document.getElementById('score-text').innerText = `得分：${currentScore} 分`;
+      document.getElementById('quiz-title').innerText = q.title;
+      document.getElementById('quiz-hint').innerText = q.hint;
+
+      const progressPercent = ((index) / quizData.length) * 100;
+      document.getElementById('progress-bar').style.width = `${progressPercent}%`;
+
+      // 清空容器
+      answerSlot.innerHTML = '';
+      wordPool.innerHTML = '';
+
+      // 自動洗牌（Fisher-Yates Shuffle）打亂字卡
+      const shuffledWords = [...q.answer];
+      for (let i = shuffledWords.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffledWords[i], shuffledWords[j]] = [shuffledWords[j], shuffledWords[i]];
+      }
+
+      // 生成字卡放入待選池
+      shuffledWords.forEach(word => {
+        const tile = document.createElement('div');
+        tile.className = 'word-tile';
+        tile.dataset.char = word;
+        tile.innerText = word;
+        wordPool.appendChild(tile);
+      });
+    }
+
+    // ==========================================
+    // 4. 答案核對
+    // ==========================================
+    function submitAnswer() {
+      if (isAnswered) return;
+
+      const currentQ = quizData[currentIndex];
+      // 取得答案框內所有字
+      const userArr = Array.from(answerSlot.children).map(tile => tile.dataset.char);
+      const userStr = userArr.join('');
+      const correctStr = currentQ.answer.join('');
+
+      if (userArr.length === 0) {
+        feedback.style.color = 'var(--accent)';
+        feedback.innerText = '⚠️ 請先將字卡拖曳到答案框中喔！';
+        return;
+      }
+
+      if (userStr === correctStr) {
+        // 答對
+        isAnswered = true;
+        currentScore += currentQ.points;
+        document.getElementById('score-text').innerText = `得分：${currentScore} 分`;
+        feedback.style.color = 'var(--correct)';
+        feedback.innerText = `🎉 答對了！太厲害了！（+${currentQ.points} 分）`;
+
+        btnSubmit.style.display = 'none';
+        btnNext.style.display = 'inline-block';
+        if (currentIndex === quizData.length - 1) {
+          btnNext.innerText = '看結算成績 🏆';
+        }
+      } else {
+        // 答錯
+        feedback.style.color = 'var(--wrong)';
+        feedback.innerText = `「${userStr}」順序不太對喔，再調換試試看！`;
+      }
+    }
+
+    // ==========================================
+    // 5. 下一題與結算控制
+    // ==========================================
+    function nextQuestion() {
+      if (currentIndex < quizData.length - 1) {
+        currentIndex++;
+        loadQuestion(currentIndex);
+      } else {
+        showSummary();
+      }
+    }
+
+    function showSummary() {
+      document.getElementById('quiz-view').style.display = 'none';
+      document.getElementById('summary-view').style.display = 'block';
+      document.getElementById('progress-bar').style.width = '100%';
+
+      const totalPossible = quizData.reduce((sum, item) => sum + item.points, 0);
+      const desc = document.getElementById('result-desc');
+      const icon = document.getElementById('result-icon');
+
+      if (currentScore === totalPossible) {
+        icon.innerText = '👑';
+        desc.innerText = `滿分過關！總分 ${currentScore} / ${totalPossible} 分，榮登「唐詩小狀元」！`;
+      } else if (currentScore >= totalPossible * 0.6) {
+        icon.innerText = '⭐';
+        desc.innerText = `很棒！總分獲得 ${currentScore} / ${totalPossible} 分，再接再厲邁向滿分！`;
+      } else {
+        icon.innerText = '💪';
+        desc.innerText = `本次得分 ${currentScore} / ${totalPossible} 分，再挑戰一次熟悉唐詩吧！`;
+      }
+    }
+
+    function restartQuiz() {
+      currentIndex = 0;
+      currentScore = 0;
+      document.getElementById('summary-view').style.display = 'none';
+      document.getElementById('quiz-view').style.display = 'block';
+      loadQuestion(0);
+    }
+
+    // 啟動測驗
+    loadQuestion(0);
+  </script>
+</body>
+</html>
